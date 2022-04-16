@@ -1,1 +1,119 @@
 
+#-----------------------------------------------------------------------------------------------------------
+
+# Source: https://rstudio-pubs-static.s3.amazonaws.com/388416_0e333320d1cb49b3ac321b97c0e8011a.html
+
+library(igraph)
+library(arules)
+library(arulesViz)
+
+# Groceries dataset contains many receipts with products of each customer's purchases
+# Each line is a receipt from a customer's basket
+
+
+github <- "https://raw.githubusercontent.com/jzuniga123"
+file <- "/SPS/master/DATA%20624/GroceryDataSet.csv"
+Groceries <- read.transactions(paste0(github, file), format="basket", sep=",")
+
+ 
+# Αssociation rule is a relationship where {i1,i2} ⇒ i3 (if you put i1 & i2 in the basket you might put i3 as well)
+
+# Support measures the frequency of the relationship in the dataset. 
+# Ιt tells us what percentage of transactions contain the combination of items A and B. 
+# e.g.purchasing fish and lemons together
+
+
+# Confidence measures the probability that the association rule will be correct, 
+# e.g., A = > B how many transactions that have bread (A) also have butter (B).
+
+# Lift measures the effectiveness of the rule in finding consequents.
+
+# Some general benchmarks:
+
+# Lift < 1 does not indicate a cross selling opportunity
+
+# Lift (A => B) = 1 means that within a set of elements there is no correlation.
+# Lift (A = > B) > 1 means a positive correlation is more commonly purchased between the products in the product set, i.e. in items A and B.
+# Lift(A =>B) < 1 means that it is unlikely to be purchased together for the negative correlation of the itemset, i.e. the products in the item set, A, and B.
+
+# Drawback of confidence
+# Confidence does not measure if the association between A and B is random or not. Whereas, Lift measures the strength of association between two items.
+
+
+# Top 20 Frequenct products plot. Most frequent is milk with 0.25
+itemFrequencyPlot(Groceries, topN=20, type="relative",col=rainbow(20),main="Frequency plot")
+
+
+# Apriori assoc. rule . supp and conf are standard values usual 0.001 and 0.5. otherwise it called trust 
+# The maxlen is the number of items in the basket. R will run forever if we don't specify it.
+# max 2 items in the left and 1 in the right
+rules <- apriori(Groceries, parameter = list(supp = 0.001, conf = 0.8, maxlen=3))
+
+# Redundancies
+# Rules will be repeated sometimes. Redundancy means one item could be specified. 
+# R will run forever and discover numerous rules. Many of them are pointless.
+# So in order to reduce it to most importants we conclude in 29 rules with redundant. 
+
+
+
+# Sort rules by maximum confidence (prob) and remove redundancies
+rules <- sort(rules, by="confidence", decreasing=T)
+rules <- rules[!is.redundant(rules)]
+inspect(head(rules, 10))
+
+# Rules interpretation:
+# 90% of the buyers who bought liquor and red wine is likely to buy bottle beer too.
+# support of 0.001931*100 = 0.19% indicates that 0.19% of the transaction in the data involve Product liquor, red wine purchases. 
+# Hence the support indicates goodness of the choice of rule and confidence indicates the correctness of the rule.
+
+# summary and model evaluation
+summary(rules)
+
+# The number of rules generated: 29
+# The distribution of rules by length: Most rules are 3 items long
+
+
+# Targeting Items
+# What are customers who can buy whole milk before buying?
+# 1) If customers buy whole milk, what are they likely to buy?
+# 2) In essence, we want the left side and the right side of the hand. It’s not hard to do with R!
+
+
+# We modify R to select as a standard value the whole milk and discover what other product are likely to buy
+rules<-apriori(data=Groceries, parameter=list(supp=0.001,conf = 0.08), 
+               appearance = list(default="lhs",rhs="whole milk"),
+               control = list(verbose=F))
+rules<-sort(rules, decreasing=TRUE,by="confidence")
+inspect(rules[1:5])
+
+
+# If it gives error out of bound reduce the confidence. e.g. conf = 0.15
+# To avoid leaky left-hand items, we set a minimum length of 2
+rules<-apriori(data=Groceries, parameter=list(supp=0.001,conf = 0.15,minlen=2), 
+               appearance = list(default="rhs",lhs="whole milk"),
+               control = list(verbose=F))
+rules<-sort(rules, decreasing=TRUE,by="confidence")
+inspect(rules[1:5])
+
+
+
+#Visualization
+
+# Plot to display rules. It is an interactive plot
+plot(rules, method = "graph",  engine = "htmlwidget")
+
+# Plot interpretation: As we can see the most products are associated with whole milk.
+plot(rules, method="graph")
+
+
+
+
+# The below plot shows that rules with high lift have medium support and confidence.
+subRules<-rules[quality(rules)$confidence>0.4]
+plot(subRules)
+
+
+# The two-key plot uses support and confidence on x and y-axis respectively. It uses order for coloring. The order is the number of items in the rule.
+# Let’s select 10 rules from subRules having the highest confidence.
+plot(subRules,method="two-key plot",jitter=0)
+
